@@ -1,0 +1,9 @@
+*.txt
+*.tsv
+*.csv
+*.xlsx
+*.xlsm
+.vs/
+AGENTS.md
+member-*.json
+signins-*.json
