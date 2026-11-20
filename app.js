@@ -1,16 +1,10 @@
-import { clean, validateMember, parseSnapshot, snapshotDate } from './snapshot-format.mjs';
+import { clean, validateMember, parseSnapshot, snapshotDate } from './snapshot-format.js';
 
-const HEADERS = [
-  'First', 'Last', 'Email Address', 'Class', 'Address1', 'Address2',
-  'City', 'State', 'Zip', 'Mobile', 'Alt Phone', 'MatchedFirst',
-  'MatchedLast', 'MatchedClass', 'MatchedEmail', 'Membership', 'DuesAmount',
-  'DonationAmount', 'HowToPay', 'AmountPaid', 'SubmittedAt', 'RecordStatus'
-];
 
 const SAMPLE_MEMBERS = [
-  { first: 'Ada', last: 'Example', class: '2002', email: 'ada@example.invalid', city: 'Sampletown', state: 'CA' },
-  { first: 'Bea', last: 'Sample', class: '2015', email: 'bea@example.invalid', city: 'Example City', state: 'MA' },
-  { first: 'Cora', last: 'Demonstration', class: '1998', email: 'cora@example.invalid' }
+  { first: 'Ada', last: 'Example', class: '2002', email: 'ada@example.invalid', city: 'Sampletown', state: 'CA', currentDues: 'PAID' },
+  { first: 'Bea', last: 'Sample', class: '2015', email: 'bea@example.invalid', city: 'Example City', state: 'MA', currentDues: 'PLEASE JOIN' },
+  { first: 'Cora', last: 'Demonstration', class: '1998', email: 'cora@example.invalid', currentDues: 'DUES PENDING' }
 ];
 
 const $ = id => document.getElementById(id);
@@ -19,6 +13,8 @@ let database;
 let members = [];
 let signins = [];
 let selectedMember = null;
+let editingSignin = null;
+let guestMode = false;
 let snapshotSource = null;
 let pendingImport = null;
 const currentEvent = () => clean($('eventName').value);
@@ -57,13 +53,27 @@ const putSnapshot = value => operation('settings', 'readwrite', store => {
   return request;
 });
 const getSignins = () => operation('signins', 'readonly', store => store.getAll());
-const addSignin = row => operation('signins', 'readwrite', store => store.add(row));
+const saveSignin = row => operation('signins', 'readwrite', store => store.put(row));
 
-function message(text) { $('message').textContent = text; }
+function message(text) {
+  $('message').textContent = text;
+  $('message').hidden = !text;
+}
+function showView(view) {
+  $('searchView').hidden = view !== 'search';
+  $('entryView').hidden = view !== 'entry';
+  $('organizerView').hidden = view !== 'organizer';
+  $('attendeeBar').hidden = view !== 'search';
+  $('organizerButton').hidden = view === 'organizer';
+  window.scrollTo({ top: 0, behavior: 'auto' });
+}
+function updateEventTitle() {
+  $('eventTitle').textContent = `${currentEvent() || 'Event'} Sign In`;
+}
 function money(value) { return Number(value || 0).toFixed(2); }
 function localTimestamp(date) {
   const pad = number => String(number).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
 async function replaceMembers(values, source) {
@@ -75,6 +85,27 @@ async function replaceMembers(values, source) {
   message(`${members.length} members stored on this device.`);
 }
 
+function matchedRecordKey(member) {
+  return [member.first, member.last, member.class, member.email].map(clean).join('\u0000');
+}
+
+function submissionMatchKey(row) {
+  return [row.MatchedFirst, row.MatchedLast, row.MatchedClass, row.MatchedEmail].map(clean).join('\u0000');
+}
+
+function latestSubmissionFor(member) {
+  const key = matchedRecordKey(member);
+  return [...eventSignins()].reverse().find(row => submissionMatchKey(row) === key);
+}
+
+function memberFromSubmission(row) {
+  return {
+    first: row.First, last: row.Last, class: row.Class, email: row['Email Address'],
+    address1: row.Address1, address2: row.Address2, city: row.City, state: row.State,
+    zip: row.Zip, mobile: row.Mobile, altPhone: row['Alt Phone']
+  };
+}
+
 function renderMembers() {
   const sourceText = snapshotSource?.exportedAt
     ? ` Snapshot exported ${snapshotDate(snapshotSource.exportedAt).toLocaleString()}.`
@@ -83,44 +114,87 @@ function renderMembers() {
   const term = $('search').value.trim().toLocaleLowerCase();
   const results = $('results');
   results.replaceChildren();
-  if (!term) return;
-  const matches = members.filter(member =>
-    `${member.first} ${member.last} ${member.email}`.toLocaleLowerCase().includes(term)).slice(0, 30);
-  for (const member of matches) {
+  if (!term) {
+    results.textContent = 'Type a last name or email to find your record.';
+    return;
+  }
+  const snapshotCandidates = members.map(original => {
+    const saved = latestSubmissionFor(original);
+    return { original, saved, current: saved ? memberFromSubmission(saved) : original, guest: false };
+  });
+  const localCandidates = eventSignins()
+    .filter(row => !row.MatchedFirst && !row.MatchedLast && !row.MatchedClass && !row.MatchedEmail)
+    .map(saved => ({ original: null, saved, current: memberFromSubmission(saved),
+      guest: saved.RecordStatus === 'NEW BY REQUEST' || saved.RecordStatus === 'SIGNIN ONLY (NOT EBSC)' }));
+  const matches = [...snapshotCandidates, ...localCandidates]
+    .filter(({ current, original }) =>
+      `${current.first} ${current.last} ${current.email} ${original?.first ?? ''} ${original?.last ?? ''} ${original?.email ?? ''}`
+        .toLocaleLowerCase().includes(term))
+    .slice(0, 30);
+  for (const candidate of matches) {
+    const { current, original, saved, guest } = candidate;
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'result';
     const name = document.createElement('strong');
-    name.textContent = `${member.first} ${member.last}`;
+    name.textContent = `${current.first} ${current.last}`;
     const context = document.createElement('small');
-    context.textContent = `${member.class} · ${member.email}`;
+    context.textContent = `${current.class} · ${current.email}`;
     button.append(name, context);
-    button.addEventListener('click', () => startEntry(member));
+    button.addEventListener('click', () => startEntry(original, guest, saved));
     results.append(button);
   }
   if (!matches.length) results.textContent = 'No matching members. You can sign in someone new.';
 }
 
-function startEntry(member) {
+function startEntry(member, guest = false, savedRow = null) {
+  message('');
   selectedMember = member;
+  editingSignin = savedRow;
+  guestMode = guest;
+  $('guestToggle').checked = guest;
   entryForm.reset();
-  for (const field of ['first', 'last', 'class', 'email', 'mobile', 'address1', 'city', 'state', 'zip']) {
-    entryForm.elements.namedItem(field).value = member?.[field] ?? '';
+  const current = savedRow ? memberFromSubmission(savedRow) : member;
+  for (const field of ['first', 'last', 'class', 'email', 'mobile', 'altPhone', 'address1', 'address2', 'city', 'state', 'zip']) {
+    entryForm.elements.namedItem(field).value = current?.[field] ?? '';
   }
-  $('entryTitle').textContent = member ? `Sign in ${member.first} ${member.last}` : 'New sign-in';
-  $('entryCard').hidden = false;
-  $('entryCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  entryForm.elements.namedItem(member ? 'mobile' : 'first').focus();
+  if (savedRow) {
+    for (const [field, value] of Object.entries({
+      membership: savedRow.Membership, dues: savedRow.DuesAmount,
+      donation: savedRow.DonationAmount, method: savedRow.HowToPay,
+      received: savedRow.AmountPaid === 'None' ? '' : savedRow.AmountPaid
+    })) entryForm.elements.namedItem(field).value = value ?? '';
+    entryForm.elements.namedItem('addByRequest').checked = savedRow.RecordStatus === 'NEW BY REQUEST';
+  }
+  $('entryTitle').textContent = guest ? 'Guest sign-in' :
+    current && (savedRow || member) ? `Sign in ${current.first} ${current.last}` : 'New record';
+  $('currentDues').textContent = member?.currentDues || (member ? 'Unknown' : 'New record');
+  $('membershipPanel').hidden = guest;
+  $('guestOptIn').hidden = !guest;
+  showView('entry');
 }
-
 function formValue(name) { return clean(entryForm.elements.namedItem(name).value); }
 
 function makeSignin() {
-  const membership = formValue('membership');
-  const dues = Number(formValue('dues') || 0);
-  const donation = Number(formValue('donation') || 0);
-  const method = formValue('method');
-  const received = formValue('received');
+  const membership = guestMode ? 'None' : formValue('membership');
+  const dues = guestMode ? 0 : Number(formValue('dues') || 0);
+  const donationText = guestMode ? '0' : formValue('donation');
+  if (!/^\d+(?:\.\d{1,2})?$/.test(donationText))
+    throw Error('Enter a donation amount with no more than two decimal places.');
+  const donation = Number(donationText);
+  const method = guestMode ? 'None' : formValue('method');
+  const received = guestMode ? '' : formValue('received');
+  const memberClass = formValue('class');
+  const state = formValue('state').toUpperCase();
+  const zip = formValue('zip');
+  const mobile = formValue('mobile');
+  const altPhone = formValue('altPhone');
+  if (!/^\d{4}(?: [A-Za-z]+)?$/.test(memberClass))
+    throw Error('Class must start with four digits, optionally followed by a space and letters.');
+  if (state && !/^[A-Z]{2}$/.test(state)) throw Error('State must be two letters.');
+  if (zip && !/^[0-9-]+$/.test(zip)) throw Error('ZIP may contain only digits and hyphens.');
+  if ([mobile, altPhone].some(phone => !/^[+()0-9 -]*$/.test(phone)))
+    throw Error('Phone numbers may contain only digits, spaces, +, parentheses, and hyphens.');
   if (membership === 'None' && dues > 0) throw Error('Choose a membership for a dues amount.');
   if (membership !== 'None' && dues <= 0) throw Error('Enter a dues amount for the membership.');
   if ((dues > 0 || donation > 0) && method === 'None') throw Error('Choose how the member will pay.');
@@ -129,21 +203,23 @@ function makeSignin() {
   const row = {
     EventName: currentEvent(),
     First: formValue('first'), Last: formValue('last'), 'Email Address': formValue('email'),
-    Class: formValue('class'), Address1: formValue('address1'), Address2: selectedMember?.address2 ?? '',
-    City: formValue('city'), State: formValue('state'), Zip: formValue('zip'), Mobile: formValue('mobile'),
-    'Alt Phone': selectedMember?.altPhone ?? '', MatchedFirst: selectedMember?.first ?? '',
+    Class: memberClass, Address1: formValue('address1'), Address2: formValue('address2'),
+    City: formValue('city'), State: state, Zip: zip, Mobile: mobile,
+    'Alt Phone': altPhone, MatchedFirst: selectedMember?.first ?? '',
     MatchedLast: selectedMember?.last ?? '', MatchedClass: selectedMember?.class ?? '',
     MatchedEmail: selectedMember?.email ?? '', Membership: membership, DuesAmount: money(dues),
     DonationAmount: money(donation), HowToPay: method,
     AmountPaid: method === 'Zelle' || method === 'PayPal' ? '' : received || 'None',
-    SubmittedAt: localTimestamp(new Date())
+    SubmittedAt: editingSignin?.SubmittedAt ?? localTimestamp(new Date())
   };
-  const changed = selectedMember && ['first', 'last', 'class', 'email', 'mobile', 'address1', 'city', 'state', 'zip']
-    .some(field => formValue(field) !== (selectedMember[field] ?? ''));
-  row.RecordStatus = !selectedMember ? 'NEW' : changed ? 'UPDATE' : 'NOCHANGE';
+  if (editingSignin) row.id = editingSignin.id;
+  const changed = selectedMember && ['first', 'last', 'class', 'email', 'mobile', 'altPhone', 'address1', 'address2', 'city', 'state', 'zip']
+    .some(field => (field === 'state' ? state : formValue(field)) !== (selectedMember[field] ?? ''));
+  row.RecordStatus = guestMode
+    ? entryForm.elements.namedItem('addByRequest').checked ? 'NEW BY REQUEST' : 'SIGNIN ONLY (NOT EBSC)'
+    : !selectedMember ? 'NEW' : changed ? 'UPDATE' : 'NOCHANGE';
   return row;
 }
-
 function renderSignins() {
   const current = eventSignins();
   $('savedCount').textContent = `${current.length} sign-in${current.length === 1 ? '' : 's'} saved`;
@@ -163,6 +239,20 @@ function renderSignins() {
   if (!current.length) list.textContent = 'No sign-ins yet for this event.';
 }
 
+function submissionForExport(row) {
+  return {
+    first: row.First, last: row.Last, email: row['Email Address'], class: row.Class,
+    address1: row.Address1, address2: row.Address2, city: row.City, state: row.State,
+    zip: row.Zip, mobile: row.Mobile, altPhone: row['Alt Phone'],
+    matchedFirst: row.MatchedFirst, matchedLast: row.MatchedLast,
+    matchedClass: row.MatchedClass, matchedEmail: row.MatchedEmail,
+    membership: row.Membership, duesAmount: Number(row.DuesAmount),
+    donationAmount: Number(row.DonationAmount), howToPay: row.HowToPay,
+    amountPaid: row.AmountPaid && row.AmountPaid !== 'None' ? Number(row.AmountPaid) : null,
+    submittedAt: row.SubmittedAt.replace(' ', 'T'), recordStatus: row.RecordStatus
+  };
+}
+
 function exportFile() {
   const eventName = currentEvent();
   if (!eventName || !/^[a-z0-9_-]+$/i.test(eventName)) {
@@ -171,19 +261,18 @@ function exportFile() {
     return;
   }
   const current = eventSignins();
-  const lines = [HEADERS.join('\t'), ...current.map(row => HEADERS.map(key => clean(row[key])).join('\t'))];
-  const blob = new Blob(['\uFEFF', lines.join('\r\n'), '\r\n'], { type: 'text/plain;charset=utf-8' });
+  const payload = { schemaVersion: 1, eventName, submissions: current.map(submissionForExport) };
+  const blob = new Blob([JSON.stringify(payload, null, 2), '\n'], { type: 'application/json;charset=utf-8' });
   const link = document.createElement('a');
   const url = URL.createObjectURL(blob);
   link.href = url;
-  link.download = `${eventName}_SignUpList.txt`;
+  link.download = `${eventName}_SignUpList.json`;
   document.body.append(link);
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60000);
   message(`Exported ${current.length} sign-ins. Saved entries remain on this device.`);
 }
-
 async function init() {
   database = await openDatabase();
   const snapshot = await getSetting('snapshot');
@@ -191,15 +280,53 @@ async function init() {
   snapshotSource = snapshot?.source ?? null;
   signins = await getSignins();
   $('eventName').value = (await getSetting('eventName')) ?? 'PrototypeEvent';
+  updateEventTitle();
   renderMembers();
   renderSignins();
+  showView('search');
   navigator.storage?.persist?.().catch(() => {});
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js').catch(() => {});
 }
 
 $('search').addEventListener('input', renderMembers);
+for (const name of ['mobile', 'altPhone']) {
+  entryForm.elements.namedItem(name).addEventListener('input', event => {
+    event.target.value = event.target.value.replace(/[^+()0-9 -]/g, '');
+  });
+}
+entryForm.elements.namedItem('zip').addEventListener('input', event => {
+  event.target.value = event.target.value.replace(/[^0-9-]/g, '');
+});
+entryForm.elements.namedItem('state').addEventListener('input', event => {
+  event.target.value = event.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2);
+});
+entryForm.elements.namedItem('donation').addEventListener('input', event => {
+  const parts = event.target.value.replace(/[^0-9.]/g, '').split('.');
+  event.target.value = parts[0] + (parts.length > 1 ? `.${parts.slice(1).join('').slice(0, 2)}` : '');
+});
 $('newButton').addEventListener('click', () => startEntry(null));
-$('cancelButton').addEventListener('click', () => { $('entryCard').hidden = true; });
+$('guestToggle').addEventListener('change', event => {
+  if (event.target.checked) startEntry(null, true);
+  else { guestMode = false; showView('search'); }
+});
+$('cancelButton').addEventListener('click', () => {
+  guestMode = false;
+  $('guestToggle').checked = false;
+  showView('search');
+});
+$('organizerButton').addEventListener('click', () => {
+  const pin = prompt('Organizer PIN');
+  if (pin === null) return;
+  if (pin !== '1234') { message('Incorrect Organizer PIN.'); return; }
+  showView('organizer');
+});
+$('startSigninButton').addEventListener('click', () => {
+  guestMode = false;
+  $('guestToggle').checked = false;
+  $('search').value = '';
+  renderMembers();
+  showView('search');
+});
 $('sampleButton').addEventListener('click', async () => {
   if (members.length && !confirm('Replace the current member snapshot with fabricated sample members? Saved sign-ins will remain.')) return;
   try {
@@ -241,26 +368,29 @@ $('useImportButton').addEventListener('click', async () => {
   finally { $('useImportButton').disabled = false; }
 });
 $('eventName').addEventListener('change', async event => {
-  try { await putSetting('eventName', clean(event.target.value)); renderSignins(); }
+  try { await putSetting('eventName', clean(event.target.value)); updateEventTitle(); renderSignins(); }
   catch (error) { message(`Event name was not saved: ${error.message}`); }
 });
 entryForm.addEventListener('submit', async event => {
   event.preventDefault();
+  const completeButton = entryForm.querySelector('button[type="submit"]');
+  if (completeButton.disabled) return;
+  completeButton.disabled = true;
   try {
     if (!currentEvent() || !/^[a-z0-9_-]+$/i.test(currentEvent())) throw Error('Enter an event name using letters, numbers, hyphens, or underscores.');
     const row = makeSignin();
-    await addSignin(row);
+    await saveSignin(row);
     signins = await getSignins();
     renderSignins();
-    $('entryCard').hidden = true;
+    guestMode = false;
+    editingSignin = null;
+    $('guestToggle').checked = false;
     $('search').value = '';
     renderMembers();
-    message(`${row.First} ${row.Last} saved on this device.`);
+    showView('search');
+    message(`${row.First} ${row.Last} information saved. Thank you!`);
   } catch (error) { message(`Sign-in was not saved: ${error.message}`); }
+  finally { completeButton.disabled = false; }
 });
 $('exportButton').addEventListener('click', exportFile);
-window.addEventListener('online', updateConnectivity);
-window.addEventListener('offline', updateConnectivity);
-function updateConnectivity() { $('offlineBadge').textContent = navigator.onLine ? 'Online' : 'Offline'; }
-updateConnectivity();
 init().catch(error => message(`Local storage is unavailable: ${error.message}`));

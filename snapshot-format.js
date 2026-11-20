@@ -6,7 +6,7 @@ export function validateMember(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     throw Error('Each member must be an object.');
   const member = {};
-  for (const field of ['first', 'last', 'class', 'email', 'address1', 'address2', 'city', 'state', 'zip', 'mobile', 'altPhone']) {
+  for (const field of ['first', 'last', 'class', 'email', 'address1', 'address2', 'city', 'state', 'zip', 'mobile', 'altPhone', 'currentDues']) {
     member[field] = clean(value[field]);
   }
   if (!member.last || !member.class)

@@ -1,1 +1,1 @@
-{"name":"EBSC Sign-in Prototype","short_name":"EBSC Sign-in","start_url":"./","scope":"./","display":"standalone","background_color":"#f8f5fb","theme_color":"#512b6f","icons":[{"src":"./icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}
+{"name":"East Bay Smith Club Sign-in","short_name":"EBSC Sign-in","start_url":"./","scope":"./","display":"standalone","background_color":"#f4f4f2","theme_color":"#f4f4f2","icons":[{"src":"./assets/ebsc-logo.png","sizes":"150x150","type":"image/png","purpose":"any"}]}

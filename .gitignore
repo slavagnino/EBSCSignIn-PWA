@@ -5,5 +5,4 @@
 *.xlsm
 .vs/
 AGENTS.md
-member-*.json
-signins-*.json
+

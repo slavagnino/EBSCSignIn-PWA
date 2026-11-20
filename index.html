@@ -3,71 +3,103 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#512b6f">
+  <meta name="theme-color" content="#f4f4f2">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="EBSC Sign-in">
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="icon" href="./assets/ebsc-logo.png" type="image/png">
+  <link rel="apple-touch-icon" href="./assets/ebsc-logo.png">
   <link rel="stylesheet" href="./style.css">
-  <title>EBSC Sign-in Prototype</title>
+  <title>East Bay Smith Club Sign-in</title>
 </head>
 <body>
-  <header><span class="mark">S</span><div><strong>Event sign-in</strong><small>Sign-ins save on this device</small></div><span id="offlineBadge">Checking…</span></header>
+  <header class="app-header">
+    <img class="club-logo" src="./assets/ebsc-logo.png" alt="East Bay Smith Club logo">
+    <div class="brand"><strong>East Bay Smith Club</strong><span id="eventTitle">Event sign-in</span></div>
+    <button id="organizerButton" type="button" class="quiet-button">Organizer</button>
+  </header>
+  <div id="attendeeBar" class="attendee-bar">
+    <label class="guest-switch"><input id="guestToggle" type="checkbox"> I'm not an East Bay Smithie</label>
+  </div>
   <main>
-    <section class="card setup">
-      <div class="section-title"><h1>Event setup</h1><span id="savedCount">0 sign-ins saved</span></div>
-      <div class="setup-grid">
-        <label>Event name <input id="eventName" autocomplete="off" value="PrototypeEvent"></label>
-        <div class="setup-actions"><button id="sampleButton" type="button">Load sample members</button><label class="file-button">Import EBSC snapshot<input id="importFile" type="file" accept=".json,application/json"></label></div>
+    <p id="message" role="status" aria-live="polite" hidden></p>
+    <section id="searchView" class="search-layout">
+      <div class="search-left">
+        <div class="card lookup-card">
+          <h1>Find your record</h1>
+          <label for="search">Last name or email</label>
+          <input id="search" type="search" placeholder="Start typing" autocomplete="off">
+          <p class="muted">Select your record to review your contact information.</p>
+          <button id="newButton" type="button">Create a new record</button>
+        </div>
+        <div class="card matches-card">
+          <h2>Matching records</h2>
+          <div id="results" class="results" aria-live="polite"></div>
+        </div>
       </div>
-      <p id="memberCount" class="muted">No member snapshot loaded.</p>
-      <div id="importReview" class="import-review" hidden>
-        <h2>Review EBSC snapshot</h2>
-        <p id="importName"></p>
-        <p id="importDetails"></p>
-        <p class="muted">Use snapshot replaces the current member list on this device. Saved sign-ins remain.</p>
-        <div class="review-actions"><button id="useImportButton" type="button" class="primary">Use snapshot</button><button id="cancelImportButton" type="button">Cancel</button></div>
-      </div>
+      <img class="search-photo" src="./assets/entrance-sign.png" alt="Entrance sign on the Smith College campus">
     </section>
 
-    <section class="card">
-      <div class="section-title"><h2>Find a member</h2><span>Search works offline</span></div>
-      <input id="search" type="search" placeholder="Name or email" autocomplete="off" aria-label="Search members">
-      <div id="results" class="results" aria-live="polite"></div>
-      <button id="newButton" type="button" class="text-button">Sign in someone new</button>
-    </section>
-
-    <section class="card" id="entryCard" hidden>
-      <div class="section-title"><h2 id="entryTitle">Sign-in details</h2><button id="cancelButton" type="button" class="text-button">Cancel</button></div>
+    <section id="entryView" hidden>
+      <div class="view-heading"><h1 id="entryTitle">Sign-in details</h1><button id="cancelButton" type="button">Back to search</button></div>
       <form id="entryForm">
-        <div class="fields">
-          <label>First name <input name="first" required autocomplete="off"></label>
-          <label>Last name <input name="last" required autocomplete="off"></label>
-          <label>Class <input name="class" required autocomplete="off"></label>
-          <label>Email <input name="email" type="email" autocomplete="off"></label>
-          <label>Mobile <input name="mobile" type="tel" autocomplete="off"></label>
-          <label>Address <input name="address1" autocomplete="off"></label>
-          <label>City <input name="city" autocomplete="off"></label>
-          <label>State <input name="state" autocomplete="off"></label>
-          <label>ZIP <input name="zip" autocomplete="off"></label>
+        <div class="entry-layout">
+          <div class="card contact-card">
+            <h2>Contact information</h2>
+            <p class="muted">Please review and make corrections as needed.</p>
+            <div class="fields">
+              <label>First name <input name="first" autocomplete="off"></label>
+              <label>Last name <input name="last" required autocomplete="off"></label>
+              <label>Class <input name="class" required pattern="[0-9]{4}( [A-Za-z]+)?" title="Enter four digits, optionally followed by a space and letters, such as 2020 SSW" autocomplete="off"></label>
+              <label>Email address <input name="email" type="email" required autocomplete="off"></label>
+              <label>Mobile <input name="mobile" type="tel" title="Use digits, spaces, +, parentheses, or hyphens" autocomplete="off"></label>
+              <label>Alt phone <input name="altPhone" type="tel" title="Use digits, spaces, +, parentheses, or hyphens" autocomplete="off"></label>
+              <label>Address 1 <input name="address1" autocomplete="off"></label>
+              <label>Address 2 <input name="address2" autocomplete="off"></label>
+              <label>City <input name="city" autocomplete="off"></label>
+              <label>State <input name="state" maxlength="2" pattern="[A-Z]{2}" title="Enter a two-letter state abbreviation" autocomplete="off"></label>
+              <label>ZIP <input name="zip" inputmode="numeric" title="Use digits and hyphens only" autocomplete="off"></label>
+            </div>
+            <label id="guestOptIn" class="guest-opt-in" hidden><input name="addByRequest" type="checkbox"> Add me to the email list for future East Bay Smith events</label>
+          </div>
+          <div class="entry-right">
+            <div id="membershipPanel" class="card membership-card">
+              <h2>Club membership</h2>
+              <p>Membership status: <strong id="currentDues">—</strong></p>
+              <div class="payment-fields">
+                <label>Membership <select name="membership"><option>None</option><option>1 year</option><option>2 year</option></select></label>
+                <label>Dues amount <input name="dues" type="number" min="0" step="0.01" value="0" inputmode="decimal"></label>
+                <label>Donation <input name="donation" type="text" value="0" inputmode="decimal" autocomplete="off"></label>
+                <label>How to pay <select name="method"><option>None</option><option>cash</option><option>check</option><option>Zelle</option><option>PayPal</option></select></label>
+                <label>Amount received now <input name="received" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Leave blank if pending"></label>
+              </div>
+            </div>
+            <img class="entry-photo" src="./assets/entrance-sign.png" alt="Smith College entrance sign">
+          </div>
         </div>
-        <div class="payment-fields">
-          <label>Membership <select name="membership"><option>None</option><option>1 year</option><option>2 year</option></select></label>
-          <label>Dues amount <input name="dues" type="number" min="0" step="0.01" value="0" inputmode="decimal"></label>
-          <label>Donation <input name="donation" type="number" min="0" step="0.01" value="0" inputmode="decimal"></label>
-          <label>How to pay <select name="method"><option>None</option><option>cash</option><option>check</option><option>Zelle</option><option>PayPal</option></select></label>
-          <label>Amount received now <input name="received" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Leave blank if pending"></label>
-        </div>
-        <p class="muted">This saves a sign-in on this device. Export the event file after the event.</p>
-        <button class="primary" type="submit">Save sign-in</button>
+        <div class="action-bar"><button class="primary" type="submit">Complete sign-in</button></div>
       </form>
     </section>
 
-    <section class="card">
-      <div class="section-title"><h2>Saved on this device</h2><button id="exportButton" type="button" disabled>Export sign-in file</button></div>
-      <div id="savedList" class="saved-list"></div>
+    <section id="organizerView" class="organizer-layout" hidden>
+      <div class="view-heading"><h1>Organizer setup</h1><button id="startSigninButton" type="button" class="primary">Start sign-in</button></div>
+      <div class="card setup-card">
+        <label>Event name <input id="eventName" autocomplete="off" value="PrototypeEvent"></label>
+        <p id="memberCount" class="muted">No member snapshot loaded.</p>
+        <div class="setup-actions"><label class="file-button">Import EBSC snapshot<input id="importFile" type="file" accept=".json,application/json"></label><button id="sampleButton" type="button">Load sample members</button></div>
+        <div id="importReview" class="import-review" hidden>
+          <h2>Review EBSC snapshot</h2>
+          <p id="importName"></p><p id="importDetails"></p>
+          <p class="muted">Use snapshot replaces the current member list on this device. Saved sign-ins remain.</p>
+          <div class="review-actions"><button id="useImportButton" type="button" class="primary">Use snapshot</button><button id="cancelImportButton" type="button">Cancel</button></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="section-title"><h2>Saved on this device</h2><span id="savedCount">0 sign-ins saved</span></div>
+        <div id="savedList" class="saved-list"></div>
+        <button id="exportButton" type="button" disabled>Export sign-in file</button>
+      </div>
     </section>
-    <p id="message" role="status" aria-live="polite"></p>
   </main>
   <script type="module" src="./app.js"></script>
 </body>
