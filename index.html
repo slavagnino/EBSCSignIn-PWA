@@ -12,15 +12,22 @@
   <title>EBSC Sign-in Prototype</title>
 </head>
 <body>
-  <header><span class="mark">S</span><div><strong>Event sign-in</strong><small>Offline prototype · fabricated data only</small></div><span id="offlineBadge">Checking…</span></header>
+  <header><span class="mark">S</span><div><strong>Event sign-in</strong><small>Sign-ins save on this device</small></div><span id="offlineBadge">Checking…</span></header>
   <main>
     <section class="card setup">
       <div class="section-title"><h1>Event setup</h1><span id="savedCount">0 sign-ins saved</span></div>
       <div class="setup-grid">
         <label>Event name <input id="eventName" autocomplete="off" value="PrototypeEvent"></label>
-        <div class="setup-actions"><button id="sampleButton" type="button">Load sample members</button><label class="file-button">Import member JSON<input id="importFile" type="file" accept=".json,application/json"></label></div>
+        <div class="setup-actions"><button id="sampleButton" type="button">Load sample members</button><label class="file-button">Import EBSC snapshot<input id="importFile" type="file" accept=".json,application/json"></label></div>
       </div>
       <p id="memberCount" class="muted">No member snapshot loaded.</p>
+      <div id="importReview" class="import-review" hidden>
+        <h2>Review EBSC snapshot</h2>
+        <p id="importName"></p>
+        <p id="importDetails"></p>
+        <p class="muted">Use snapshot replaces the current member list on this device. Saved sign-ins remain.</p>
+        <div class="review-actions"><button id="useImportButton" type="button" class="primary">Use snapshot</button><button id="cancelImportButton" type="button">Cancel</button></div>
+      </div>
     </section>
 
     <section class="card">

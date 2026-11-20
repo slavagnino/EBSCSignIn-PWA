@@ -1,3 +1,5 @@
+import { clean, validateMember, parseSnapshot, snapshotDate } from './snapshot-format.mjs';
+
 const HEADERS = [
   'First', 'Last', 'Email Address', 'Class', 'Address1', 'Address2',
   'City', 'State', 'Zip', 'Mobile', 'Alt Phone', 'MatchedFirst',
@@ -17,6 +19,8 @@ let database;
 let members = [];
 let signins = [];
 let selectedMember = null;
+let snapshotSource = null;
+let pendingImport = null;
 const currentEvent = () => clean($('eventName').value);
 const eventSignins = () => signins.filter(row => row.EventName === currentEvent());
 
@@ -47,38 +51,35 @@ function operation(store, mode, action) {
 
 const getSetting = key => operation('settings', 'readonly', store => store.get(key));
 const putSetting = (key, value) => operation('settings', 'readwrite', store => store.put(value, key));
+const putSnapshot = value => operation('settings', 'readwrite', store => {
+  const request = store.put(value, 'snapshot');
+  store.delete('members');
+  return request;
+});
 const getSignins = () => operation('signins', 'readonly', store => store.getAll());
 const addSignin = row => operation('signins', 'readwrite', store => store.add(row));
 
 function message(text) { $('message').textContent = text; }
-function clean(value) { return String(value ?? '').replace(/[\t\r\n]+/g, ' ').trim(); }
 function money(value) { return Number(value || 0).toFixed(2); }
 function localTimestamp(date) {
   const pad = number => String(number).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
-function validateMember(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw Error('Each member must be an object.');
-  const member = {};
-  for (const field of ['first', 'last', 'class', 'email', 'address1', 'address2', 'city', 'state', 'zip', 'mobile', 'altPhone']) {
-    member[field] = clean(value[field]);
-  }
-  if (!member.last || !member.class) throw Error('Each member needs a last name and class.');
-  return member;
-}
-
-async function replaceMembers(values) {
-  if (!Array.isArray(values)) throw Error('The member JSON must contain an array.');
+async function replaceMembers(values, source) {
   const checked = values.map(validateMember);
-  await putSetting('members', checked);
+  await putSnapshot({ members: checked, source });
   members = checked;
+  snapshotSource = source;
   renderMembers();
   message(`${members.length} members stored on this device.`);
 }
 
 function renderMembers() {
-  $('memberCount').textContent = `${members.length} members stored on this device.`;
+  const sourceText = snapshotSource?.exportedAt
+    ? ` Snapshot exported ${snapshotDate(snapshotSource.exportedAt).toLocaleString()}.`
+    : snapshotSource?.type === 'sample' ? ' Fabricated sample data.' : '';
+  $('memberCount').textContent = `${members.length} members stored on this device.${sourceText}`;
   const term = $('search').value.trim().toLocaleLowerCase();
   const results = $('results');
   results.replaceChildren();
@@ -185,7 +186,9 @@ function exportFile() {
 
 async function init() {
   database = await openDatabase();
-  members = (await getSetting('members')) ?? [];
+  const snapshot = await getSetting('snapshot');
+  members = snapshot?.members ?? (await getSetting('members')) ?? [];
+  snapshotSource = snapshot?.source ?? null;
   signins = await getSignins();
   $('eventName').value = (await getSetting('eventName')) ?? 'PrototypeEvent';
   renderMembers();
@@ -199,17 +202,43 @@ $('newButton').addEventListener('click', () => startEntry(null));
 $('cancelButton').addEventListener('click', () => { $('entryCard').hidden = true; });
 $('sampleButton').addEventListener('click', async () => {
   if (members.length && !confirm('Replace the current member snapshot with fabricated sample members? Saved sign-ins will remain.')) return;
-  try { await replaceMembers(SAMPLE_MEMBERS); } catch (error) { message(error.message); }
+  try {
+    pendingImport = null;
+    $('importReview').hidden = true;
+    await replaceMembers(SAMPLE_MEMBERS, { type: 'sample' });
+  } catch (error) { message(error.message); }
 });
 $('importFile').addEventListener('change', async event => {
   const file = event.target.files?.[0];
   if (!file) return;
+  pendingImport = null;
+  $('importReview').hidden = true;
   try {
-    const values = JSON.parse(await file.text());
-    if (members.length && !confirm('Replace the current member snapshot? Saved sign-ins will remain.')) return;
-    await replaceMembers(values);
+    const parsed = parseSnapshot(JSON.parse(await file.text()));
+    pendingImport = { ...parsed, fileName: file.name };
+    $('importName').textContent = file.name;
+    $('importDetails').textContent = `${parsed.members.length} members · Exported ${snapshotDate(parsed.exportedAt).toLocaleString()} · Current list: ${members.length} members`;
+    $('importReview').hidden = false;
+    $('importReview').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    message('Review the snapshot before using it.');
   } catch (error) { message(`Import failed: ${error.message}`); }
   finally { event.target.value = ''; }
+});
+$('cancelImportButton').addEventListener('click', () => {
+  pendingImport = null;
+  $('importReview').hidden = true;
+  message('Snapshot import canceled.');
+});
+$('useImportButton').addEventListener('click', async () => {
+  if (!pendingImport) return;
+  $('useImportButton').disabled = true;
+  try {
+    await replaceMembers(pendingImport.members,
+      { type: 'ebsc', exportedAt: pendingImport.exportedAt, fileName: pendingImport.fileName });
+    pendingImport = null;
+    $('importReview').hidden = true;
+  } catch (error) { message(`Import failed: ${error.message}`); }
+  finally { $('useImportButton').disabled = false; }
 });
 $('eventName').addEventListener('change', async event => {
   try { await putSetting('eventName', clean(event.target.value)); renderSignins(); }
