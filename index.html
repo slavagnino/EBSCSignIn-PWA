@@ -27,7 +27,7 @@
       <div class="search-left">
         <div class="card lookup-card">
           <h1>Find your record</h1>
-          <label for="search">Last name or email</label>
+          <label for="search">Name or email</label>
           <input id="search" type="search" placeholder="Start typing" autocomplete="off">
           <p class="muted">Select your record to review your contact information.</p>
           <button id="newButton" type="button">Create a new record</button>
@@ -50,7 +50,7 @@
             <div class="fields">
               <label>First name <input name="first" autocomplete="off"></label>
               <label>Last name <input name="last" required autocomplete="off"></label>
-              <label>Class <input name="class" required pattern="[0-9]{4}( [A-Za-z]+)?" title="Enter four digits, optionally followed by a space and letters, such as 2020 SSW" autocomplete="off"></label>
+              <label>Class <input name="class" required title="Enter four digits, followed by optional grad type (such as 2020 SSW)" autocomplete="off"></label>
               <label>Email address <input name="email" type="email" required autocomplete="off"></label>
               <label>Mobile <input name="mobile" type="tel" title="Use digits, spaces, +, parentheses, or hyphens" autocomplete="off"></label>
               <label>Alt phone <input name="altPhone" type="tel" title="Use digits, spaces, +, parentheses, or hyphens" autocomplete="off"></label>
@@ -67,17 +67,30 @@
               <h2>Club membership</h2>
               <p>Membership status: <strong id="currentDues">—</strong></p>
               <div class="payment-fields">
-                <label>Membership <select name="membership"><option>None</option><option>1 year</option><option>2 year</option></select></label>
-                <label>Dues amount <input name="dues" type="number" min="0" step="0.01" value="0" inputmode="decimal"></label>
-                <label>Donation <input name="donation" type="text" value="0" inputmode="decimal" autocomplete="off"></label>
-                <label>How to pay <select name="method"><option>None</option><option>cash</option><option>check</option><option>Zelle</option><option>PayPal</option></select></label>
-                <label>Amount received now <input name="received" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Leave blank if pending"></label>
+                <label id="membershipChoice" class="selection-field">Membership <select name="membership"><option>None</option><option>1 year</option><option>2 year</option></select></label>
+                <p id="complimentaryMessage" class="complimentary-message" hidden>Your first two years of membership are complimentary.</p>
+                <div class="amount-breakdown">
+                  <div class="amount-row"><span>Dues amount</span><input id="duesDisplay" type="text" value="0" aria-label="Dues amount" readonly tabindex="-1"></div>
+                  <label class="amount-row"><span class="amount-caption">Donation<span id="donationWarning" class="field-warning" aria-hidden="true">Enter whole dollar amounts only.</span></span><input name="donation" type="text" value="0" inputmode="numeric" autocomplete="off"></label>
+                  <div class="amount-row total-row"><span>Total</span><strong id="totalAmount">$0</strong></div>
+                </div>
+                <label class="selection-field">How to pay <select name="method"><option>None</option><option>cash</option><option>check</option><option>Zelle</option><option>PayPal</option></select></label>
+                <label id="receivedLabel" class="amount-row" hidden><span class="amount-caption"><span id="receivedCaption">Enter amount you paid in cash</span><span id="receivedWarning" class="field-warning" aria-hidden="true">Enter whole dollar amounts only.</span></span><input name="received" type="text" inputmode="numeric" autocomplete="off"></label>
+                <div id="paymentGuidance" class="payment-guidance" hidden>
+                  <p id="zelleGuidance" hidden></p>
+                  <div id="paypalGuidance" hidden>
+                    <p id="paypalAmountGuidance"></p>
+                    <img src="./assets/paypal-qr.png" alt="QR code for the club's PayPal donation checkout">
+                    <p>Pay with PayPal, a credit or debit card, or Venmo. You do not need a PayPal login.</p>
+                    <p>Use your phone's camera to scan the QR code. Do not scan it from within Venmo.</p>
+                  </div>
+                </div>
               </div>
             </div>
-            <img class="entry-photo" src="./assets/entrance-sign.png" alt="Smith College entrance sign">
+            <img id="entryPhoto" class="entry-photo" src="./assets/entrance-sign.png" alt="Smith College entrance sign">
           </div>
         </div>
-        <div class="action-bar"><button class="primary" type="submit">Complete sign-in</button></div>
+        <div class="action-bar"><p id="entryError" class="entry-error" role="alert" hidden></p><button class="primary" type="submit">Complete sign-in</button></div>
       </form>
     </section>
 
@@ -85,12 +98,12 @@
       <div class="view-heading"><h1>Organizer setup</h1><button id="startSigninButton" type="button" class="primary">Start sign-in</button></div>
       <div class="card setup-card">
         <label>Event name <input id="eventName" autocomplete="off" value="PrototypeEvent"></label>
-        <p id="memberCount" class="muted">No member snapshot loaded.</p>
-        <div class="setup-actions"><label class="file-button">Import EBSC snapshot<input id="importFile" type="file" accept=".json,application/json"></label><button id="sampleButton" type="button">Load sample members</button></div>
+        <p id="memberCount" class="muted">No EBSC snapshot imported.</p>
+        <div class="setup-actions"><label class="file-button">Import EBSC snapshot<input id="importFile" type="file" accept=".json,application/json"></label></div>
         <div id="importReview" class="import-review" hidden>
           <h2>Review EBSC snapshot</h2>
           <p id="importName"></p><p id="importDetails"></p>
-          <p class="muted">Use snapshot replaces the current member list on this device. Saved sign-ins remain.</p>
+          <p class="muted">Use snapshot replaces the current EBSC record list on this device. Saved sign-ins remain.</p>
           <div class="review-actions"><button id="useImportButton" type="button" class="primary">Use snapshot</button><button id="cancelImportButton" type="button">Cancel</button></div>
         </div>
       </div>

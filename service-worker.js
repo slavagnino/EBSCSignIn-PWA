@@ -1,5 +1,5 @@
-const CACHE = 'ebsc-signin-shell-v5';
-const SHELL = ['./', './index.html', './style.css', './app.js', './snapshot-format.js', './manifest.webmanifest', './assets/ebsc-logo.png', './assets/entrance-sign.png'];
+const CACHE = 'ebsc-signin-shell-v9';
+const SHELL = ['./', './index.html', './style.css', './app.js', './snapshot-format.js', './manifest.webmanifest', './assets/ebsc-logo.png', './assets/entrance-sign.png', './assets/paypal-qr.png'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));
 });

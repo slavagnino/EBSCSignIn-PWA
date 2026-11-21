@@ -1,12 +1,6 @@
 import { clean, validateMember, parseSnapshot, snapshotDate } from './snapshot-format.js';
 
 
-const SAMPLE_MEMBERS = [
-  { first: 'Ada', last: 'Example', class: '2002', email: 'ada@example.invalid', city: 'Sampletown', state: 'CA', currentDues: 'PAID' },
-  { first: 'Bea', last: 'Sample', class: '2015', email: 'bea@example.invalid', city: 'Example City', state: 'MA', currentDues: 'PLEASE JOIN' },
-  { first: 'Cora', last: 'Demonstration', class: '1998', email: 'cora@example.invalid', currentDues: 'DUES PENDING' }
-];
-
 const $ = id => document.getElementById(id);
 const entryForm = $('entryForm');
 let database;
@@ -59,6 +53,10 @@ function message(text) {
   $('message').textContent = text;
   $('message').hidden = !text;
 }
+function entryError(text) {
+  $('entryError').textContent = text;
+  $('entryError').hidden = !text;
+}
 function showView(view) {
   $('searchView').hidden = view !== 'search';
   $('entryView').hidden = view !== 'entry';
@@ -70,7 +68,99 @@ function showView(view) {
 function updateEventTitle() {
   $('eventTitle').textContent = `${currentEvent() || 'Event'} Sign In`;
 }
-function money(value) { return Number(value || 0).toFixed(2); }
+const CLASS_GUIDANCE = 'Enter four digits, followed by optional grad type (such as 2020 SSW)';
+const CLASS_PATTERN = /^\d{4}(?: [A-Za-z]+)?$/;
+function complimentaryClass(memberClass) {
+  return CLASS_PATTERN.test(memberClass) && new Date().getFullYear() - Number(memberClass.slice(0, 4)) < 2;
+}
+function duesAmount(memberClass, membership) {
+  if (!CLASS_PATTERN.test(memberClass) || complimentaryClass(memberClass) || membership === 'None') return 0;
+  const yearsSinceGraduation = new Date().getFullYear() - Number(memberClass.slice(0, 4));
+  if (yearsSinceGraduation <= 10) return membership === '2 year' ? 25 : 15;
+  return membership === '2 year' ? 40 : 25;
+}
+const WHOLE_DOLLAR_GUIDANCE = 'Enter whole dollar amounts only.';
+function setFieldWarning(id, visible) {
+  const warning = $(id);
+  warning.classList.toggle('visible', visible);
+  warning.setAttribute('aria-hidden', String(!visible));
+}
+function showWholeDollarWarning(id) {
+  $(id).textContent = WHOLE_DOLLAR_GUIDANCE;
+  setFieldWarning(id, true);
+}
+function watchWholeDollarInput(field, warningId, onChange) {
+  field.addEventListener('beforeinput', event => {
+    if (event.data && !/^\d+$/.test(event.data)) {
+      event.preventDefault();
+      showWholeDollarWarning(warningId);
+    }
+  });
+  field.addEventListener('paste', event => {
+    const pasted = event.clipboardData?.getData('text') ?? '';
+    if (!/^\d+$/.test(pasted)) {
+      event.preventDefault();
+      showWholeDollarWarning(warningId);
+    }
+  });
+  field.addEventListener('input', () => {
+    const valid = !field.value || /^\d+$/.test(field.value);
+    field.setCustomValidity(valid ? '' : WHOLE_DOLLAR_GUIDANCE);
+    setFieldWarning(warningId, !valid);
+    onChange();
+  });
+}
+function updatePaymentGuidance() {
+  const method = formValue('method');
+  const amountText = $('totalAmount').textContent;
+  const total = amountText.startsWith('$') ? Number(amountText.slice(1)) : 0;
+  const showZelle = !guestMode && total > 0 && method === 'Zelle';
+  const showPayPal = !guestMode && total > 0 && method === 'PayPal';
+  $('paymentGuidance').hidden = !showZelle && !showPayPal;
+  $('entryPhoto').hidden = showZelle || showPayPal;
+  $('zelleGuidance').hidden = !showZelle;
+  $('paypalGuidance').hidden = !showPayPal;
+  if (showZelle)
+    $('zelleGuidance').textContent = `Open your banking app and send $${total} to ebsmithclub with Zelle. Add a note describing the payment.`;
+  if (showPayPal)
+    $('paypalAmountGuidance').textContent = `Scan this QR code to send $${total} to East Bay Smith Club.`;
+}
+function updatePaymentDisplay() {
+  const method = formValue('method');
+  const cashOrCheck = method === 'cash' || method === 'check';
+  $('receivedLabel').hidden = !cashOrCheck || guestMode;
+  $('receivedCaption').textContent = method === 'check' ? 'Enter amount you paid by check' : 'Enter amount you paid in cash';
+  const receivedField = entryForm.elements.namedItem('received');
+  if (!cashOrCheck) {
+    receivedField.value = '';
+    setFieldWarning('receivedWarning', false);
+  }
+  const received = clean(receivedField.value);
+  receivedField.setCustomValidity(received && !/^\d+$/.test(received) ? WHOLE_DOLLAR_GUIDANCE : '');
+  updatePaymentGuidance();
+}
+function wholeDollarDisplay(value) {
+  const text = String(value ?? '0');
+  return /^\d+\.00$/.test(text) ? String(Number(text)) : text;
+}
+function updateDuesAndTotal() {
+  const memberClass = formValue('class');
+  const classField = entryForm.elements.namedItem('class');
+  classField.setCustomValidity(memberClass && !CLASS_PATTERN.test(memberClass) ? CLASS_GUIDANCE : '');
+  const complimentary = !guestMode && complimentaryClass(memberClass);
+  $('membershipChoice').hidden = complimentary;
+  $('complimentaryMessage').hidden = !complimentary;
+  if (complimentary) entryForm.elements.namedItem('membership').value = 'None';
+  const dues = guestMode ? 0 : duesAmount(memberClass, formValue('membership'));
+  $('duesDisplay').value = String(dues);
+  const donationField = entryForm.elements.namedItem('donation');
+  const donationText = formValue('donation');
+  const donationIsWhole = !donationText || /^\d+$/.test(donationText);
+  donationField.setCustomValidity(donationIsWhole ? '' : WHOLE_DOLLAR_GUIDANCE);
+  if (!donationIsWhole) showWholeDollarWarning('donationWarning');
+  $('totalAmount').textContent = donationIsWhole ? `$${dues + (guestMode ? 0 : Number(donationText || 0))}` : '—';
+  updatePaymentGuidance();
+}
 function localTimestamp(date) {
   const pad = number => String(number).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
@@ -82,7 +172,7 @@ async function replaceMembers(values, source) {
   members = checked;
   snapshotSource = source;
   renderMembers();
-  message(`${members.length} members stored on this device.`);
+  message(`Imported ${members.length} EBSC records from ${source.fileName}.`);
 }
 
 function matchedRecordKey(member) {
@@ -107,15 +197,21 @@ function memberFromSubmission(row) {
 }
 
 function renderMembers() {
-  const sourceText = snapshotSource?.exportedAt
-    ? ` Snapshot exported ${snapshotDate(snapshotSource.exportedAt).toLocaleString()}.`
-    : snapshotSource?.type === 'sample' ? ' Fabricated sample data.' : '';
-  $('memberCount').textContent = `${members.length} members stored on this device.${sourceText}`;
+  if (snapshotSource?.exportedAt) {
+    const fileName = snapshotSource.fileName || 'Filename unavailable';
+    $('memberCount').textContent = `Snapshot: ${fileName} · Created: ${snapshotDate(snapshotSource.exportedAt).toLocaleString()} · EBSC records: ${members.length}`;
+  } else if (snapshotSource?.type === 'sample') {
+    $('memberCount').textContent = `Prototype sample data: ${members.length} records. Import an EBSC snapshot for event use.`;
+  } else {
+    $('memberCount').textContent = members.length
+      ? `Snapshot details unavailable · EBSC records: ${members.length}`
+      : 'No EBSC snapshot imported.';
+  }
   const term = $('search').value.trim().toLocaleLowerCase();
   const results = $('results');
   results.replaceChildren();
   if (!term) {
-    results.textContent = 'Type a last name or email to find your record.';
+    results.textContent = 'Type a name or email to find your record.';
     return;
   }
   const snapshotCandidates = members.map(original => {
@@ -149,20 +245,25 @@ function renderMembers() {
 
 function startEntry(member, guest = false, savedRow = null) {
   message('');
+  entryError('');
   selectedMember = member;
   editingSignin = savedRow;
   guestMode = guest;
   $('guestToggle').checked = guest;
   entryForm.reset();
+  for (const [name, warningId] of [['donation', 'donationWarning'], ['received', 'receivedWarning']]) {
+    entryForm.elements.namedItem(name).setCustomValidity('');
+    setFieldWarning(warningId, false);
+  }
   const current = savedRow ? memberFromSubmission(savedRow) : member;
   for (const field of ['first', 'last', 'class', 'email', 'mobile', 'altPhone', 'address1', 'address2', 'city', 'state', 'zip']) {
     entryForm.elements.namedItem(field).value = current?.[field] ?? '';
   }
   if (savedRow) {
     for (const [field, value] of Object.entries({
-      membership: savedRow.Membership, dues: savedRow.DuesAmount,
-      donation: savedRow.DonationAmount, method: savedRow.HowToPay,
-      received: savedRow.AmountPaid === 'None' ? '' : savedRow.AmountPaid
+      membership: savedRow.Membership,
+      donation: wholeDollarDisplay(savedRow.DonationAmount), method: savedRow.HowToPay,
+      received: savedRow.AmountPaid === 'None' || !savedRow.AmountPaid ? '' : wholeDollarDisplay(savedRow.AmountPaid)
     })) entryForm.elements.namedItem(field).value = value ?? '';
     entryForm.elements.namedItem('addByRequest').checked = savedRow.RecordStatus === 'NEW BY REQUEST';
   }
@@ -171,35 +272,35 @@ function startEntry(member, guest = false, savedRow = null) {
   $('currentDues').textContent = member?.currentDues || (member ? 'Unknown' : 'New record');
   $('membershipPanel').hidden = guest;
   $('guestOptIn').hidden = !guest;
+  updateDuesAndTotal();
+  updatePaymentDisplay();
   showView('entry');
 }
 function formValue(name) { return clean(entryForm.elements.namedItem(name).value); }
 
 function makeSignin() {
-  const membership = guestMode ? 'None' : formValue('membership');
-  const dues = guestMode ? 0 : Number(formValue('dues') || 0);
-  const donationText = guestMode ? '0' : formValue('donation');
-  if (!/^\d+(?:\.\d{1,2})?$/.test(donationText))
-    throw Error('Enter a donation amount with no more than two decimal places.');
+  const memberClass = formValue('class');
+  if (!CLASS_PATTERN.test(memberClass)) throw Error(CLASS_GUIDANCE);
+  const membership = guestMode || complimentaryClass(memberClass) ? 'None' : formValue('membership');
+  const dues = guestMode ? 0 : duesAmount(memberClass, membership);
+  const donationText = guestMode ? '0' : formValue('donation') || '0';
+  if (!/^\d+$/.test(donationText)) throw Error('Enter a whole-dollar donation amount.');
   const donation = Number(donationText);
+  const total = dues + donation;
   const method = guestMode ? 'None' : formValue('method');
   const received = guestMode ? '' : formValue('received');
-  const memberClass = formValue('class');
+  const cashOrCheck = method === 'cash' || method === 'check';
   const state = formValue('state').toUpperCase();
   const zip = formValue('zip');
   const mobile = formValue('mobile');
   const altPhone = formValue('altPhone');
-  if (!/^\d{4}(?: [A-Za-z]+)?$/.test(memberClass))
-    throw Error('Class must start with four digits, optionally followed by a space and letters.');
   if (state && !/^[A-Z]{2}$/.test(state)) throw Error('State must be two letters.');
   if (zip && !/^[0-9-]+$/.test(zip)) throw Error('ZIP may contain only digits and hyphens.');
   if ([mobile, altPhone].some(phone => !/^[+()0-9 -]*$/.test(phone)))
     throw Error('Phone numbers may contain only digits, spaces, +, parentheses, and hyphens.');
-  if (membership === 'None' && dues > 0) throw Error('Choose a membership for a dues amount.');
-  if (membership !== 'None' && dues <= 0) throw Error('Enter a dues amount for the membership.');
-  if ((dues > 0 || donation > 0) && method === 'None') throw Error('Choose how the member will pay.');
-  if (received && method === 'None') throw Error('Choose a payment method for the amount received.');
-  if (received && Number(received) > dues + donation) throw Error('Amount received exceeds dues plus donation.');
+  if (total > 0 && method === 'None') throw Error('Choose how you will pay.');
+  if (cashOrCheck && ((total > 0 && !received) || (received && (!/^\d+$/.test(received) || Number(received) !== total))))
+    throw Error('Amount paid does not match total expected.');
   const row = {
     EventName: currentEvent(),
     First: formValue('first'), Last: formValue('last'), 'Email Address': formValue('email'),
@@ -207,9 +308,9 @@ function makeSignin() {
     City: formValue('city'), State: state, Zip: zip, Mobile: mobile,
     'Alt Phone': altPhone, MatchedFirst: selectedMember?.first ?? '',
     MatchedLast: selectedMember?.last ?? '', MatchedClass: selectedMember?.class ?? '',
-    MatchedEmail: selectedMember?.email ?? '', Membership: membership, DuesAmount: money(dues),
-    DonationAmount: money(donation), HowToPay: method,
-    AmountPaid: method === 'Zelle' || method === 'PayPal' ? '' : received || 'None',
+    MatchedEmail: selectedMember?.email ?? '', Membership: membership, DuesAmount: String(dues),
+    DonationAmount: String(donation), HowToPay: method,
+    AmountPaid: cashOrCheck && received ? received : method === 'Zelle' || method === 'PayPal' ? '' : 'None',
     SubmittedAt: editingSignin?.SubmittedAt ?? localTimestamp(new Date())
   };
   if (editingSignin) row.id = editingSignin.id;
@@ -300,10 +401,11 @@ entryForm.elements.namedItem('zip').addEventListener('input', event => {
 entryForm.elements.namedItem('state').addEventListener('input', event => {
   event.target.value = event.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2);
 });
-entryForm.elements.namedItem('donation').addEventListener('input', event => {
-  const parts = event.target.value.replace(/[^0-9.]/g, '').split('.');
-  event.target.value = parts[0] + (parts.length > 1 ? `.${parts.slice(1).join('').slice(0, 2)}` : '');
-});
+entryForm.elements.namedItem('class').addEventListener('input', updateDuesAndTotal);
+entryForm.elements.namedItem('membership').addEventListener('change', updateDuesAndTotal);
+watchWholeDollarInput(entryForm.elements.namedItem('donation'), 'donationWarning', updateDuesAndTotal);
+entryForm.elements.namedItem('method').addEventListener('change', updatePaymentDisplay);
+watchWholeDollarInput(entryForm.elements.namedItem('received'), 'receivedWarning', () => {});
 $('newButton').addEventListener('click', () => startEntry(null));
 $('guestToggle').addEventListener('change', event => {
   if (event.target.checked) startEntry(null, true);
@@ -327,14 +429,6 @@ $('startSigninButton').addEventListener('click', () => {
   renderMembers();
   showView('search');
 });
-$('sampleButton').addEventListener('click', async () => {
-  if (members.length && !confirm('Replace the current member snapshot with fabricated sample members? Saved sign-ins will remain.')) return;
-  try {
-    pendingImport = null;
-    $('importReview').hidden = true;
-    await replaceMembers(SAMPLE_MEMBERS, { type: 'sample' });
-  } catch (error) { message(error.message); }
-});
 $('importFile').addEventListener('change', async event => {
   const file = event.target.files?.[0];
   if (!file) return;
@@ -344,7 +438,7 @@ $('importFile').addEventListener('change', async event => {
     const parsed = parseSnapshot(JSON.parse(await file.text()));
     pendingImport = { ...parsed, fileName: file.name };
     $('importName').textContent = file.name;
-    $('importDetails').textContent = `${parsed.members.length} members · Exported ${snapshotDate(parsed.exportedAt).toLocaleString()} · Current list: ${members.length} members`;
+    $('importDetails').textContent = `${parsed.members.length} EBSC records · Created ${snapshotDate(parsed.exportedAt).toLocaleString()} · Current list: ${members.length} EBSC records`;
     $('importReview').hidden = false;
     $('importReview').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     message('Review the snapshot before using it.');
@@ -371,8 +465,14 @@ $('eventName').addEventListener('change', async event => {
   try { await putSetting('eventName', clean(event.target.value)); updateEventTitle(); renderSignins(); }
   catch (error) { message(`Event name was not saved: ${error.message}`); }
 });
+entryForm.addEventListener('keydown', event => {
+  if (event.key === 'Enter' && event.target.matches('input')) event.preventDefault();
+});
+entryForm.addEventListener('input', () => entryError(''));
+entryForm.addEventListener('change', () => entryError(''));
 entryForm.addEventListener('submit', async event => {
   event.preventDefault();
+  entryError('');
   const completeButton = entryForm.querySelector('button[type="submit"]');
   if (completeButton.disabled) return;
   completeButton.disabled = true;
@@ -389,7 +489,9 @@ entryForm.addEventListener('submit', async event => {
     renderMembers();
     showView('search');
     message(`${row.First} ${row.Last} information saved. Thank you!`);
-  } catch (error) { message(`Sign-in was not saved: ${error.message}`); }
+  } catch (error) {
+    entryError(error.message);
+  }
   finally { completeButton.disabled = false; }
 });
 $('exportButton').addEventListener('click', exportFile);
