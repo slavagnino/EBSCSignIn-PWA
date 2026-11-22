@@ -70,7 +70,7 @@ button:disabled { opacity: .48; cursor: default; }
 .result { width: 100%; justify-content: space-between; gap: .8rem; text-align: left; }
 .result strong { font-size: 1rem; }
 .result small { font-weight: 400; color: #555; text-align: right; }
-.search-photo, .entry-photo { display: block; width: 100%; object-fit: cover; border-radius: 10px; }
+.search-photo { display: block; width: 100%; object-fit: cover; border-radius: 10px; }
 .search-photo { height: 100%; max-height: 65vh; min-height: 280px; object-position: center; }
 
 .entry-layout { display: grid; grid-template-columns: minmax(0, 55%) minmax(0, 1fr); gap: 1rem; align-items: start; }
@@ -93,7 +93,6 @@ button:disabled { opacity: .48; cursor: default; }
 .payment-guidance p { margin: .4rem 0; }
 .payment-guidance img { display: block; width: 160px; height: 160px; margin: .65rem 0; image-rendering: pixelated; }
 .guest-opt-in { margin-top: 1.2rem; }
-.entry-photo { height: min(25vh, 190px); min-height: 130px; }
 .action-bar { display: flex; align-items: center; gap: 1rem; position: sticky; bottom: 0; margin-top: 1rem; padding: .7rem 0 calc(.7rem + env(safe-area-inset-bottom)); background: #f4f4f2; border-top: 1px solid #d4d4d1; }
 .action-bar { justify-content: flex-end; flex-wrap: wrap; }
 .action-bar button { min-width: 210px; }
@@ -114,7 +113,6 @@ button:disabled { opacity: .48; cursor: default; }
   .search-layout { min-height: 0; }
 
   .search-photo { height: 240px; min-height: 0; }
-  .entry-photo { height: 160px; }
 }
 @media (max-width: 580px) {
   .app-header { gap: .55rem; }

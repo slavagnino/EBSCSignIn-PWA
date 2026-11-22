@@ -119,7 +119,6 @@ function updatePaymentGuidance() {
   const showZelle = !guestMode && total > 0 && method === 'Zelle';
   const showPayPal = !guestMode && total > 0 && method === 'PayPal';
   $('paymentGuidance').hidden = !showZelle && !showPayPal;
-  $('entryPhoto').hidden = showZelle || showPayPal;
   $('zelleGuidance').hidden = !showZelle;
   $('paypalGuidance').hidden = !showPayPal;
   if (showZelle)
