@@ -9,8 +9,8 @@ export function validateMember(value) {
   for (const field of ['first', 'last', 'class', 'email', 'address1', 'address2', 'city', 'state', 'zip', 'mobile', 'altPhone', 'currentDues']) {
     member[field] = clean(value[field]);
   }
-  if (!member.last || !member.class)
-    throw Error('Each member needs a last name and class.');
+  if (!member.last)
+    throw Error('Each member needs a last name.');
   return member;
 }
 

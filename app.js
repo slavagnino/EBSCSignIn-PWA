@@ -74,7 +74,9 @@ function complimentaryClass(memberClass) {
   return CLASS_PATTERN.test(memberClass) && new Date().getFullYear() - Number(memberClass.slice(0, 4)) < 2;
 }
 function duesAmount(memberClass, membership) {
-  if (!CLASS_PATTERN.test(memberClass) || complimentaryClass(memberClass) || membership === 'None') return 0;
+  if (complimentaryClass(memberClass) || membership === 'None') return 0;
+  if (!memberClass) return membership === '2 year' ? 40 : 25;
+  if (!CLASS_PATTERN.test(memberClass)) return 0;
   const yearsSinceGraduation = new Date().getFullYear() - Number(memberClass.slice(0, 4));
   if (yearsSinceGraduation <= 10) return membership === '2 year' ? 25 : 15;
   return membership === '2 year' ? 40 : 25;
@@ -235,7 +237,7 @@ function renderMembers() {
     const name = document.createElement('strong');
     name.textContent = `${current.first} ${current.last}`;
     const context = document.createElement('small');
-    context.textContent = `${current.class} · ${current.email}`;
+    context.textContent = [current.class, current.email].filter(Boolean).join(' · ');
     button.append(name, context);
     button.addEventListener('click', () => startEntry(original, guest, saved));
     results.append(button);
@@ -280,7 +282,7 @@ function formValue(name) { return clean(entryForm.elements.namedItem(name).value
 
 function makeSignin() {
   const memberClass = formValue('class');
-  if (!CLASS_PATTERN.test(memberClass)) throw Error(CLASS_GUIDANCE);
+  if (memberClass && !CLASS_PATTERN.test(memberClass)) throw Error(CLASS_GUIDANCE);
   const membership = guestMode || complimentaryClass(memberClass) ? 'None' : formValue('membership');
   const dues = guestMode ? 0 : duesAmount(memberClass, membership);
   const donationText = guestMode ? '0' : formValue('donation') || '0';
@@ -479,6 +481,7 @@ entryForm.addEventListener('submit', async event => {
   try {
     if (!currentEvent() || !/^[a-z0-9_-]+$/i.test(currentEvent())) throw Error('Enter an event name using letters, numbers, hyphens, or underscores.');
     const row = makeSignin();
+    if (!row.Class && !window.confirm('Class is blank. If dues are selected, the standard rate applies ($25 for 1 year or $40 for 2 years). Complete sign-in without a Class?')) return;
     await saveSignin(row);
     signins = await getSignins();
     renderSignins();
