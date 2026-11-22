@@ -71,11 +71,11 @@
                 <p id="complimentaryMessage" class="complimentary-message" hidden>Your first two years of membership are complimentary.</p>
                 <div class="amount-breakdown">
                   <div class="amount-row"><span>Dues amount</span><input id="duesDisplay" type="text" value="0" aria-label="Dues amount" readonly tabindex="-1"></div>
-                  <label class="amount-row"><span class="amount-caption">Donation<span id="donationWarning" class="field-warning" aria-hidden="true">Enter whole dollar amounts only.</span></span><input name="donation" type="text" value="0" inputmode="numeric" autocomplete="off"></label>
+                  <label class="amount-row has-warning"><span>Donation</span><input name="donation" type="text" value="0" inputmode="numeric" autocomplete="off"><span id="donationWarning" class="field-warning" aria-hidden="true">Enter whole dollar amounts only.</span></label>
                   <div class="amount-row total-row"><span>Total</span><strong id="totalAmount">$0</strong></div>
                 </div>
                 <label class="selection-field">How to pay <select name="method"><option>None</option><option>cash</option><option>check</option><option>Zelle</option><option>PayPal</option></select></label>
-                <label id="receivedLabel" class="amount-row" hidden><span class="amount-caption"><span id="receivedCaption">Enter amount you paid in cash</span><span id="receivedWarning" class="field-warning" aria-hidden="true">Enter whole dollar amounts only.</span></span><input name="received" type="text" inputmode="numeric" autocomplete="off"></label>
+                <label id="receivedLabel" class="amount-row has-warning" hidden><span id="receivedCaption">Enter amount you paid in cash</span><input name="received" type="text" inputmode="numeric" autocomplete="off"><span id="receivedWarning" class="field-warning" aria-hidden="true">Enter whole dollar amounts only.</span></label>
                 <div id="paymentGuidance" class="payment-guidance" hidden>
                   <p id="zelleGuidance" hidden></p>
                   <div id="paypalGuidance" hidden>
@@ -96,7 +96,7 @@
     <section id="organizerView" class="organizer-layout" hidden>
       <div class="view-heading"><h1>Organizer setup</h1><button id="startSigninButton" type="button" class="primary">Start sign-in</button></div>
       <div class="card setup-card">
-        <label>Event name <input id="eventName" autocomplete="off" value="PrototypeEvent"></label>
+        <label>Event name <input id="eventName" required autocomplete="off" value="PrototypeEvent"></label>
         <p id="memberCount" class="muted">No EBSC snapshot imported.</p>
         <div class="setup-actions"><label class="file-button">Import EBSC snapshot<input id="importFile" type="file" accept=".json,application/json"></label></div>
         <div id="importReview" class="import-review" hidden>

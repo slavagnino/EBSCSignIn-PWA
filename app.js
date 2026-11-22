@@ -9,10 +9,40 @@ let signins = [];
 let selectedMember = null;
 let editingSignin = null;
 let guestMode = false;
+let savingSignin = false;
 let snapshotSource = null;
 let pendingImport = null;
 const currentEvent = () => clean($('eventName').value);
 const eventSignins = () => signins.filter(row => row.EventName === currentEvent());
+const contactFields = ['first', 'last', 'class', 'email', 'mobile', 'altPhone', 'address1', 'address2', 'city', 'state', 'zip'];
+
+function updateCompleteButton() {
+  const hasEntry = contactFields.some(name => formValue(name)) ||
+    Number(formValue('donation')) > 0 || formValue('membership') !== 'None' ||
+    formValue('method') !== 'None' || formValue('received') ||
+    entryForm.elements.namedItem('addByRequest').checked;
+  entryForm.querySelector('button[type="submit"]').disabled = savingSignin ||
+    (!selectedMember && !editingSignin && !hasEntry);
+}
+
+function validEventName() {
+  const field = $('eventName');
+  field.setCustomValidity(currentEvent() ? '' : 'Enter an event name before starting sign-in.');
+  return field.reportValidity();
+}
+
+async function saveEventName() {
+  if (!validEventName()) return false;
+  try {
+    await putSetting('eventName', currentEvent());
+    updateEventTitle();
+    renderSignins();
+    return true;
+  } catch (error) {
+    message(`Event name was not saved: ${error.message}`);
+    return false;
+  }
+}
 
 function openDatabase() {
   return new Promise((resolve, reject) => {
@@ -70,6 +100,15 @@ function updateEventTitle() {
 }
 const CLASS_GUIDANCE = 'Enter four digits, followed by optional grad type (such as 2020 SSW)';
 const CLASS_PATTERN = /^\d{4}(?: [A-Za-z]+)?$/;
+const ZIP_PATTERN = /^\d{5}(?:-\d{4})?$/;
+const PHONE_GUIDANCE = 'Enter 10 digits (optional leading 1), or an international number starting with +.';
+function validPhone(phone) {
+  if (!phone) return true;
+  if (!/^\+?[0-9() -]+$/.test(phone)) return false;
+  const digits = phone.replace(/\D/g, '');
+  return phone.startsWith('+') ? digits.length >= 8 && digits.length <= 15 :
+    digits.length === 10 || digits.length === 11 && digits.startsWith('1');
+}
 function complimentaryClass(memberClass) {
   return CLASS_PATTERN.test(memberClass) && new Date().getFullYear() - Number(memberClass.slice(0, 4)) < 2;
 }
@@ -136,8 +175,7 @@ function updatePaymentDisplay() {
     receivedField.value = '';
     setFieldWarning('receivedWarning', false);
   }
-  const received = clean(receivedField.value);
-  receivedField.setCustomValidity(received && !/^\d+$/.test(received) ? WHOLE_DOLLAR_GUIDANCE : '');
+  validateField(receivedField);
   updatePaymentGuidance();
 }
 function wholeDollarDisplay(value) {
@@ -160,6 +198,7 @@ function updateDuesAndTotal() {
   donationField.setCustomValidity(donationIsWhole ? '' : WHOLE_DOLLAR_GUIDANCE);
   if (!donationIsWhole) showWholeDollarWarning('donationWarning');
   $('totalAmount').textContent = donationIsWhole ? `$${dues + (guestMode ? 0 : Number(donationText || 0))}` : '—';
+  validateField(entryForm.elements.namedItem('received'));
   updatePaymentGuidance();
 }
 function localTimestamp(date) {
@@ -276,8 +315,46 @@ function startEntry(member, guest = false, savedRow = null) {
   updateDuesAndTotal();
   updatePaymentDisplay();
   showView('entry');
+  updateCompleteButton();
 }
 function formValue(name) { return clean(entryForm.elements.namedItem(name).value); }
+
+function validateField(field) {
+  const value = clean(field.value);
+  let error = '';
+  switch (field.name) {
+    case 'class':
+      if (value && !CLASS_PATTERN.test(value)) error = CLASS_GUIDANCE;
+      break;
+    case 'mobile':
+    case 'altPhone':
+      if (!validPhone(value)) error = PHONE_GUIDANCE;
+      break;
+    case 'state':
+      if (value && !/^[A-Z]{2}$/.test(value)) error = 'Enter a two-letter state abbreviation.';
+      break;
+    case 'zip':
+      if (value && !ZIP_PATTERN.test(value)) error = 'Enter a five-digit ZIP or ZIP+4.';
+      break;
+    case 'donation':
+      if (value && !/^\d+$/.test(value)) error = WHOLE_DOLLAR_GUIDANCE;
+      break;
+    case 'received':
+      if (formValue('method') === 'cash' || formValue('method') === 'check') {
+        const total = Number($('totalAmount').textContent.replace('$', ''));
+        if (value && !/^\d+$/.test(value)) error = WHOLE_DOLLAR_GUIDANCE;
+        else if (total > 0 && (!value || Number(value) !== total)) error = 'Amount paid does not match total expected.';
+      }
+      break;
+  }
+  field.setCustomValidity(error);
+  const valid = field.checkValidity();
+  if (field.name === 'received' && valid) {
+    $('receivedWarning').textContent = WHOLE_DOLLAR_GUIDANCE;
+    setFieldWarning('receivedWarning', false);
+  }
+  return valid;
+}
 
 function makeSignin() {
   const memberClass = formValue('class');
@@ -296,9 +373,8 @@ function makeSignin() {
   const mobile = formValue('mobile');
   const altPhone = formValue('altPhone');
   if (state && !/^[A-Z]{2}$/.test(state)) throw Error('State must be two letters.');
-  if (zip && !/^[0-9-]+$/.test(zip)) throw Error('ZIP may contain only digits and hyphens.');
-  if ([mobile, altPhone].some(phone => !/^[+()0-9 -]*$/.test(phone)))
-    throw Error('Phone numbers may contain only digits, spaces, +, parentheses, and hyphens.');
+  if (zip && !ZIP_PATTERN.test(zip)) throw Error('Enter a five-digit ZIP or ZIP+4.');
+  if ([mobile, altPhone].some(phone => !validPhone(phone))) throw Error(PHONE_GUIDANCE);
   if (total > 0 && method === 'None') throw Error('Choose how you will pay.');
   if (cashOrCheck && ((total > 0 && !received) || (received && (!/^\d+$/.test(received) || Number(received) !== total))))
     throw Error('Amount paid does not match total expected.');
@@ -357,18 +433,14 @@ function submissionForExport(row) {
 
 function exportFile() {
   const eventName = currentEvent();
-  if (!eventName || !/^[a-z0-9_-]+$/i.test(eventName)) {
-    message('Enter an event name using letters, numbers, hyphens, or underscores.');
-    $('eventName').focus();
-    return;
-  }
+  if (!validEventName()) return;
   const current = eventSignins();
   const payload = { schemaVersion: 1, eventName, submissions: current.map(submissionForExport) };
   const blob = new Blob([JSON.stringify(payload, null, 2), '\n'], { type: 'application/json;charset=utf-8' });
   const link = document.createElement('a');
   const url = URL.createObjectURL(blob);
   link.href = url;
-  link.download = `${eventName}_SignUpList.json`;
+  link.download = `${eventName.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')}_SignUpList.json`;
   document.body.append(link);
   link.click();
   link.remove();
@@ -381,7 +453,7 @@ async function init() {
   members = snapshot?.members ?? (await getSetting('members')) ?? [];
   snapshotSource = snapshot?.source ?? null;
   signins = await getSignins();
-  $('eventName').value = (await getSetting('eventName')) ?? 'PrototypeEvent';
+  $('eventName').value = clean(await getSetting('eventName')) || 'PrototypeEvent';
   updateEventTitle();
   renderMembers();
   renderSignins();
@@ -421,9 +493,12 @@ $('organizerButton').addEventListener('click', () => {
   const pin = prompt('Organizer PIN');
   if (pin === null) return;
   if (pin !== '1234') { message('Incorrect Organizer PIN.'); return; }
+  message('');
   showView('organizer');
 });
-$('startSigninButton').addEventListener('click', () => {
+$('startSigninButton').addEventListener('click', async () => {
+  if (!await saveEventName()) return;
+  message('');
   guestMode = false;
   $('guestToggle').checked = false;
   $('search').value = '';
@@ -462,23 +537,39 @@ $('useImportButton').addEventListener('click', async () => {
   } catch (error) { message(`Import failed: ${error.message}`); }
   finally { $('useImportButton').disabled = false; }
 });
-$('eventName').addEventListener('change', async event => {
-  try { await putSetting('eventName', clean(event.target.value)); updateEventTitle(); renderSignins(); }
-  catch (error) { message(`Event name was not saved: ${error.message}`); }
-});
+$('eventName').addEventListener('input', () => $('eventName').setCustomValidity(''));
+$('eventName').addEventListener('change', saveEventName);
 entryForm.addEventListener('keydown', event => {
   if (event.key === 'Enter' && event.target.matches('input')) event.preventDefault();
 });
-entryForm.addEventListener('input', () => entryError(''));
-entryForm.addEventListener('change', () => entryError(''));
+entryForm.addEventListener('input', event => {
+  if (event.target.matches('input:not([readonly]):not([type="checkbox"])')) validateField(event.target);
+  entryError('');
+  updateCompleteButton();
+});
+entryForm.addEventListener('change', () => { entryError(''); updateCompleteButton(); });
+entryForm.addEventListener('focusout', event => {
+  const field = event.target;
+  if (!field.matches('input:not([readonly]):not([type="checkbox"])')) return;
+  if (validateField(field)) return;
+  if (field.name === 'received' && field.validationMessage === 'Amount paid does not match total expected.') {
+    $('receivedWarning').textContent = 'Amount does not match Total.';
+    setFieldWarning('receivedWarning', true);
+    return;
+  }
+  if (!event.relatedTarget || entryForm.contains(event.relatedTarget)) {
+    field.reportValidity();
+    field.focus();
+  }
+});
 entryForm.addEventListener('submit', async event => {
   event.preventDefault();
   entryError('');
   const completeButton = entryForm.querySelector('button[type="submit"]');
   if (completeButton.disabled) return;
-  completeButton.disabled = true;
+  savingSignin = true;
+  updateCompleteButton();
   try {
-    if (!currentEvent() || !/^[a-z0-9_-]+$/i.test(currentEvent())) throw Error('Enter an event name using letters, numbers, hyphens, or underscores.');
     const row = makeSignin();
     if (!row.Class && !window.confirm('Class is blank. If dues are selected, the standard rate applies ($25 for 1 year or $40 for 2 years). Complete sign-in without a Class?')) return;
     await saveSignin(row);
@@ -494,7 +585,7 @@ entryForm.addEventListener('submit', async event => {
   } catch (error) {
     entryError(error.message);
   }
-  finally { completeButton.disabled = false; }
+  finally { savingSignin = false; updateCompleteButton(); }
 });
 $('exportButton').addEventListener('click', exportFile);
 init().catch(error => message(`Local storage is unavailable: ${error.message}`));
