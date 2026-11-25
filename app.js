@@ -1,7 +1,7 @@
 import { clean, validateMember, parseSnapshot, snapshotDate } from './snapshot-format.js';
 
 // Bump this with the service-worker cache for each PWA build.
-const APP_BUILD = 18;
+const APP_BUILD = 19;
 
 const $ = id => document.getElementById(id);
 const entryForm = $('entryForm');
@@ -497,9 +497,9 @@ $('cancelButton').addEventListener('click', () => {
   showView('search');
 });
 $('organizerButton').addEventListener('click', () => {
-  const pin = prompt('Organizer PIN');
-  if (pin === null) return;
-  if (pin !== '1234') { message('Incorrect Organizer PIN.'); return; }
+  const code = prompt('Organizer code');
+  if (code === null) return;
+  if (code.trim().toUpperCase() !== '1875SC') { message('Incorrect Organizer code.'); return; }
   message('');
   showView('organizer');
 });
