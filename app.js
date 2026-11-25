@@ -248,6 +248,7 @@ function renderMembers() {
       : 'No EBSC snapshot imported.';
   }
   const term = $('search').value.trim().toLocaleLowerCase();
+  $('searchView').classList.toggle('has-query', Boolean(term));
   const results = $('results');
   results.replaceChildren();
   if (!term) {

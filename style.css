@@ -126,11 +126,11 @@ button:disabled { opacity: .48; cursor: default; }
 }
 
 @media (orientation: landscape) and (any-pointer: coarse) {
-  .search-layout:focus-within { grid-template-columns: minmax(250px, 34%) minmax(0, 1fr); min-height: 0; align-items: start; }
-  .search-layout:focus-within .search-left { display: contents; }
-  .search-layout:focus-within .lookup-card { grid-column: 1; }
-  .search-layout:focus-within .lookup-card .muted { display: none; }
-  .search-layout:focus-within .lookup-card > button { margin-top: .65rem; }
-  .search-layout:focus-within .matches-card { grid-column: 2; grid-row: 1; min-height: 0; }
-  .search-layout:focus-within .search-photo { display: none; }
+  .search-layout:is(:focus-within, .has-query) { grid-template-columns: minmax(250px, 34%) minmax(0, 1fr); min-height: 0; align-items: start; }
+  .search-layout:is(:focus-within, .has-query) .search-left { display: contents; }
+  .search-layout:is(:focus-within, .has-query) .lookup-card { grid-column: 1; }
+  .search-layout:is(:focus-within, .has-query) .lookup-card .muted { display: none; }
+  .search-layout:is(:focus-within, .has-query) .lookup-card > button { margin-top: .65rem; }
+  .search-layout:is(:focus-within, .has-query) .matches-card { grid-column: 2; grid-row: 1; min-height: 0; }
+  .search-layout:is(:focus-within, .has-query) .search-photo { display: none; }
 }
