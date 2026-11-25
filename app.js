@@ -488,6 +488,8 @@ $('guestToggle').addEventListener('change', event => {
 $('cancelButton').addEventListener('click', () => {
   guestMode = false;
   $('guestToggle').checked = false;
+  $('search').value = '';
+  renderMembers();
   showView('search');
 });
 $('organizerButton').addEventListener('click', () => {
