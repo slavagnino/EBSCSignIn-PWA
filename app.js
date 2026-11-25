@@ -1,5 +1,7 @@
 import { clean, validateMember, parseSnapshot, snapshotDate } from './snapshot-format.js';
 
+// Bump this with the service-worker cache for each PWA build.
+const APP_BUILD = 17;
 
 const $ = id => document.getElementById(id);
 const entryForm = $('entryForm');
@@ -449,6 +451,8 @@ function exportFile() {
   message(`Exported ${current.length} sign-ins. Saved entries remain on this device.`);
 }
 async function init() {
+  const versionLabel = $('appVersion');
+  if (versionLabel) versionLabel.textContent = `App build ${APP_BUILD}`;
   database = await openDatabase();
   const snapshot = await getSetting('snapshot');
   members = snapshot?.members ?? (await getSetting('members')) ?? [];

@@ -1,4 +1,4 @@
-const CACHE = 'ebsc-signin-shell-v16';
+const CACHE = 'ebsc-signin-shell-v17';
 const SHELL = ['./', './index.html', './style.css', './app.js', './snapshot-format.js', './manifest.webmanifest', './assets/ebsc-logo.png', './assets/entrance-sign.png', './assets/paypal-qr.png'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));
